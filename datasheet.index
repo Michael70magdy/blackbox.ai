@@ -1,0 +1,203 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teams Grading System (Firebase)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+  <div id="app" class="flex-grow flex flex-col">
+
+    <!-- Dashboard -->
+    <section id="home" class="max-w-7xl mx-auto p-6 flex flex-col min-h-screen">
+      <header class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-semibold">Teams Grading Dashboard</h1>
+        <div class="space-x-4">
+          <button id="adminLoginBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md">Admin Login</button>
+          <button id="teamLoginBtn" class="px-4 py-2 bg-green-600 text-white rounded-md">Team Login</button>
+        </div>
+      </header>
+      <main>
+        <table class="w-full border-collapse text-left shadow-md rounded-lg">
+          <thead class="bg-blue-600 text-white">
+            <tr><th class="p-4">Rank</th><th class="p-4">Team</th><th class="p-4">Points</th></tr>
+          </thead>
+          <tbody id="teamsTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+        </table>
+      </main>
+    </section>
+
+    <!-- Admin Page -->
+    <section id="admin" class="hidden max-w-4xl mx-auto p-6 flex flex-col">
+      <header class="flex justify-between items-center mb-8">
+        <h2 class="text-2xl font-semibold">Admin Panel</h2>
+        <button id="adminBackBtn" class="px-3 py-1 bg-gray-300 rounded-md">Back</button>
+      </header>
+      <div class="bg-white shadow p-6 rounded-lg">
+        <h3 class="font-semibold mb-4">Add Team</h3>
+        <input id="newTeamName" type="text" placeholder="Team name" class="border p-2 mb-2 w-full">
+        <input id="newTeamEmail" type="email" placeholder="Team email" class="border p-2 mb-2 w-full">
+        <input id="newTeamPassword" type="password" placeholder="Team password" class="border p-2 mb-2 w-full">
+        <button id="addTeamBtn" class="px-4 py-2 bg-green-600 text-white rounded-md">Add Team</button>
+      </div>
+
+      <div class="bg-white shadow p-6 rounded-lg mt-6">
+        <h3 class="font-semibold mb-4">Manage Points</h3>
+        <select id="pointsTeamSelect" class="border p-2 mb-2 w-full"></select>
+        <select id="pointsOperation" class="border p-2 mb-2 w-full">
+          <option value="add">Add</option>
+          <option value="remove">Remove</option>
+        </select>
+        <input id="pointsValue" type="number" placeholder="Points" class="border p-2 mb-2 w-full">
+        <input id="pointsComment" type="text" placeholder="Comment" class="border p-2 mb-2 w-full">
+        <button id="pointsSubmit" class="px-4 py-2 bg-blue-600 text-white rounded-md">Submit</button>
+      </div>
+    </section>
+
+    <!-- Team Page -->
+    <section id="team" class="hidden max-w-4xl mx-auto p-6 flex flex-col">
+      <header class="flex justify-between items-center mb-8">
+        <h2 id="teamPageTitle" class="text-2xl font-semibold">Team Details</h2>
+        <button id="teamBackBtn" class="px-3 py-1 bg-gray-300 rounded-md">Back</button>
+      </header>
+      <table class="w-full border-collapse text-left bg-white shadow rounded-lg">
+        <thead class="bg-green-600 text-white">
+          <tr><th class="p-3">Date</th><th class="p-3">Operation</th><th class="p-3">Points</th><th class="p-3">Comment</th></tr>
+        </thead>
+        <tbody id="teamDetailsBody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc } 
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } 
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // ✅ Replace with your Firebase project config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Elements
+    const homeSection = document.getElementById("home");
+    const adminSection = document.getElementById("admin");
+    const teamSection = document.getElementById("team");
+    const teamsTableBody = document.getElementById("teamsTableBody");
+    const pointsTeamSelect = document.getElementById("pointsTeamSelect");
+    const teamPageTitle = document.getElementById("teamPageTitle");
+    const teamDetailsBody = document.getElementById("teamDetailsBody");
+
+    function showSection(sec) {
+      homeSection.classList.add("hidden");
+      adminSection.classList.add("hidden");
+      teamSection.classList.add("hidden");
+      sec.classList.remove("hidden");
+    }
+
+    // Render Dashboard
+    async function renderDashboard() {
+      const querySnapshot = await getDocs(collection(db, "teams"));
+      let teams = [];
+      querySnapshot.forEach(docSnap => teams.push({ id: docSnap.id, ...docSnap.data() }));
+      teams.sort((a, b) => b.points - a.points);
+
+      teamsTableBody.innerHTML = "";
+      pointsTeamSelect.innerHTML = "";
+      teams.forEach((team, i) => {
+        teamsTableBody.innerHTML += `
+          <tr class="hover:bg-gray-100">
+            <td class="p-4">${i+1}</td>
+            <td class="p-4">${team.name}</td>
+            <td class="p-4">${team.points}</td>
+          </tr>`;
+        pointsTeamSelect.innerHTML += `<option value="${team.id}">${team.name}</option>`;
+      });
+    }
+
+    // Add Team
+    document.getElementById("addTeamBtn").addEventListener("click", async () => {
+      const name = document.getElementById("newTeamName").value;
+      const email = document.getElementById("newTeamEmail").value;
+      const password = document.getElementById("newTeamPassword").value;
+
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, "teams", cred.user.uid), { name, points: 0 });
+      alert("Team added!");
+      renderDashboard();
+    });
+
+    // Manage Points
+    document.getElementById("pointsSubmit").addEventListener("click", async () => {
+      const teamId = pointsTeamSelect.value;
+      const op = document.getElementById("pointsOperation").value;
+      const val = parseInt(document.getElementById("pointsValue").value);
+      const comment = document.getElementById("pointsComment").value;
+
+      const ref = doc(db, "teams", teamId);
+      const snap = await getDoc(ref);
+      let newPoints = snap.data().points + (op === "add" ? val : -val);
+      if (newPoints < 0) newPoints = 0;
+
+      await updateDoc(ref, { points: newPoints });
+      await addDoc(collection(db, "teams", teamId, "history"), {
+        date: new Date().toISOString(),
+        operation: op,
+        points: val,
+        comment
+      });
+      alert("Points updated!");
+      renderDashboard();
+    });
+
+    // Team Login
+    document.getElementById("teamLoginBtn").addEventListener("click", async () => {
+      const email = prompt("Enter team email:");
+      const password = prompt("Enter password:");
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        const teamId = cred.user.uid;
+        const teamSnap = await getDoc(doc(db, "teams", teamId));
+        const team = teamSnap.data();
+        teamPageTitle.textContent = `Team Details: ${team.name}`;
+        teamDetailsBody.innerHTML = "";
+        const histSnap = await getDocs(collection(db, "teams", teamId, "history"));
+        histSnap.forEach(h => {
+          const d = h.data();
+          teamDetailsBody.innerHTML += `
+            <tr><td class="p-3">${new Date(d.date).toLocaleString()}</td>
+                <td class="p-3">${d.operation}</td>
+                <td class="p-3">${d.points}</td>
+                <td class="p-3">${d.comment}</td></tr>`;
+        });
+        showSection(teamSection);
+      } catch (err) {
+        alert("Login failed: " + err.message);
+      }
+    });
+
+    // Admin Login (simple: no password, you can add Firebase Auth for real admins)
+    document.getElementById("adminLoginBtn").addEventListener("click", () => {
+      showSection(adminSection);
+    });
+
+    document.getElementById("adminBackBtn").addEventListener("click", () => showSection(homeSection));
+    document.getElementById("teamBackBtn").addEventListener("click", () => { signOut(auth); showSection(homeSection); });
+
+    renderDashboard();
+    showSection(homeSection);
+  </script>
+</body>
+</html>
